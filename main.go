@@ -6,7 +6,8 @@ import (
 	"log"
 	"os/exec"
 	"strings"
-	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 // getActiveWindowInfo uses AppleScript to get name of frontmost application
@@ -48,13 +49,40 @@ func getActiveWindowInfo() (string, string, error) {
 }
 
 func main() {
-	for {
-		appName, windowTitle, err := getActiveWindowInfo()
-		if err != nil {
-			log.Printf("Error: %v", err)
-		} else {
-			fmt.Printf("Time: %s | App: %s | Title: %s\n", time.Now(), appName, windowTitle)
-		}
-
+	// Create a watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer watcher.Close()
+
+	// start listening for events.
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				log.Println("event:", event)
+				if event.Has(fsnotify.Write) {
+					log.Println("modified file: ", event.Name)
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Println("error:", err)
+			}
+		}
+	}()
+
+	// Add a path.
+	err = watcher.Add("/Users/huyong97/personal/ai_system_monitor")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Block main goroutine forever.
+	<-make(chan struct{})
 }
